@@ -1,0 +1,28 @@
+version: '3.1'
+services:
+  nginx:
+    container_name: nginx
+    image: nginx:1.13
+    restart: always
+    ports:
+      - 80:80
+    network_mode: host
+    hostname: localhost
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+    depends_on:
+      - springboot
+    environment:
+      TZ: Asia/Jakarta
+    healthcheck:
+      test: "exit 0"
+  springboot:
+    restart: always
+    image: didinj/myspringbootapp
+    container_name: springboot
+    ports:
+      - 8080:8080
+    network_mode: host
+    hostname: localhost
+    healthcheck:
+      test: "exit 0"

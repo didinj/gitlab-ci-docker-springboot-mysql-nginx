@@ -1,0 +1,53 @@
+stages:
+  - test
+  - build jar
+  - build and push docker image
+  - deploy
+test_job:
+  image: maven:3.6.2-jdk-11-slim
+  stage: test
+  script:
+    - pwd
+    - mvn clean
+    - mvn compile
+    - mvn test
+  tags:
+    - test
+  only:
+    - master
+build:
+  image: maven:3.6.2-jdk-11-slim
+  stage: build jar
+  script:
+    - mvn clean install -Dspring.profiles.active=dev && mvn package -B -e -Dspring.profiles.active=dev
+  artifacts:
+    paths:
+      - target/*.jar
+  only:
+    - master
+docker build:
+  services:
+    - docker:19.03.13-dind
+  image: docker:19.03.13-dind
+  stage: build and push docker image
+  script:
+    - docker build --build-arg SPRING_ACTIVE_PROFILE=dev -t $DOCKER_REPO:latest .
+    - docker login -u $DOCKER_USER -p $DOCKER_PASSWORD docker.io
+    - docker push $DOCKER_REPO:latest
+  only:
+    - master
+deploy:
+  image: ubuntu:latest
+  stage: deploy
+  before_script:
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+  script:
+    - pwd
+    - ssh root@$SERVER "docker login -u $DOCKER_USER -p $DOCKER_PASSWORD docker.io; docker stop $APP_NAME; docker system prune -a -f; docker run --name mysql --network host --env-file=mysql.env --volume=mysql-data:/var/lib/mysql -d mysql:latest; docker pull $DOCKER_REPO:latest; docker-compose up -d; docker logout"
+  only:
+    - master
